@@ -213,9 +213,9 @@ if __name__ == '__main__':
       mse_list.append(mse)
   mse_array = np.array(mse_list)
   print('average mse', np.sqrt(mse_all/count))
-  # np.save('data/error/interp_tra_%d.npy' % start_time, mse_array)
-  # plt.plot(np.arange(len(mse_list)),mse_list)
-  # plt.savefig('fig/interp_tra_%s_%d.jpg' % (interp_method, start_time))
+  np.save('error/interp_tra_%d.npy' % start_time, mse_array)
+  plt.plot(np.arange(len(mse_list)),mse_list)
+  plt.savefig('fig/interp_tra_%s_%d.jpg' % (interp_method, start_time))
   
   # np.save('data/interp_tra_rbf', interp)
   # np.save('data/interp_tra_len_rbf', interp_len)

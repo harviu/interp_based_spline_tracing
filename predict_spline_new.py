@@ -82,7 +82,7 @@ class ControlPointInterpolator():
     pad_t = self.t.T
     pad_t = np.pad(pad_t, ((0,0),(2,2)), constant_values= ((0,1)))
     C_u = list(map(splev_fn, pad_t, self.pl.transpose(1,2,0), [self.k] * self.N, [u] * self.N))
-    knot_idx = np.array(list(map(find_larger_idx, self.t.T, [u] * self.N)))
+    knot_idx = np.array(list(map(find_larger_idx, self.t.T, [u] * self.N))) # knot_idx is the just larger index for time u (-1) if the spline is existed at the time step
     mask = ~(knot_idx==-1)
     masked_idx, masked_t, masked_cp = get_masked(mask, knot_idx, self.t, self.pl)
     C_u = np.array(C_u)[mask]
@@ -112,6 +112,7 @@ class ControlPointInterpolator():
     while(True):
       print("ite",ite)
       ite += 1
+      # find the next nearest knot position.
       nx_idx = np.where(forward_idx!=-1, forward_idx +1, -1)
       nx_idx[nx_idx>=self.T] = -1
       mask = ~(nx_idx==-1)
@@ -200,128 +201,13 @@ class ControlPointInterpolator():
       nx_interp = nx_vector + query
       return nx_interp
 
-  def interp_nsteps(self, query, query_knot, tmin, tmax, k, return_neighbor=False):
-    '''
-    interpolation and advect query particles at time t to tend (tend included)
-    query is assumed to be reasonabe (near set pathlines)
-    '''
-    assert tmin < self.T
-    assert tmax < self.T
-
-    tlen = tmax - tmin + 1
-    num_query, dim = query.shape
-    output_cp = np.zeros((tlen,num_query,dim), dtype=np.float32)
-    output_cp[0] = query
-    output_knot = np.zeros((tlen,num_query),np.float32)
-    output_knot[0] = query_knot
-    output_nn = np.zeros((tlen,num_query,k,dim+1),np.float32)
-
-    q_interp = query.copy()
-    knot_interp = query_knot.copy()
-    for t in range(tmin, tmax):
-      if __name__ == '__main__':
-        print(t)
-      if return_neighbor:
-        q_interp, knot_interp, nn1, nn2 = self.interp_one(q_interp, knot_interp, t, k, return_neighbor=return_neighbor)
-        if t == tmin:
-          output_nn[t-tmin] = nn1
-        output_nn[t-tmin+1] = nn2
-      else:
-        q_interp, knot_interp = self.interp_one(q_interp, knot_interp, t, k)
-      output_cp[t-tmin+1] = q_interp
-      output_knot[t-tmin+1] = knot_interp
-    if return_neighbor:
-      return output_cp, output_knot, output_nn
-    else:
-      return output_cp, output_knot
-
-  def interp_noacc(self, query, query_knot, tmin, tmax, k, return_neighbor=False):
-    '''
-    interpolation query particles from time t to tend (tend included)
-    query is assumed to be reasonabe (near set pathlines)
-    Do not accumulate errors, query: (T,N,D)
-    '''
-    assert tmin < tmax
-    assert tmax < self.tmax
-
-    tlen = tmax - tmin + 1
-    T, num_query, dim = query.shape
-    assert T == tlen
-    output_cp = np.zeros((tlen,num_query,dim), dtype=np.float32)
-    output_cp[0] = query[0]
-    output_knot = np.zeros((tlen,num_query),np.float32)
-    output_knot[0] = query_knot[0]
-    output_nn = np.zeros((tlen,num_query,k,dim+1),np.float32)
-
-    for t in range(tmin, tmax):
-      if return_neighbor:
-        q_interp, knot_interp, nn1, nn2 = self.interp_one(query[t], query_knot[t], t, k, return_neighbor=return_neighbor)
-        if t == tmin:
-          output_nn[t-tmin] = nn1
-        output_nn[t-tmin+1] = nn2
-      else:
-        q_interp, knot_interp = self.interp_one(query[t], query_knot[t], t, k)
-      output_cp[t-tmin+1] = q_interp
-      output_knot[t-tmin+1] = knot_interp
-    if return_neighbor:
-      return output_cp, output_knot, output_nn
-    else:
-      return output_cp, output_knot
-
-  def interp_one(self, query, query_knot, t, k, out_proportion: float = 0.01, return_neighbor=False):
-    '''
-    input t is the control point time step 
-    '''
-
-    ts = self.pl[t]
-    knot = self.t[t]
-    ts_nx = self.pl[t+1] - self.pl[t]
-    knot_nx = self.t[t+1] - self.t[t]
-
-    ##### check out of bound neighbors
-    nn, dist = kd_knn(ts, query, k) #(Q,K)
-    neighbor_nx = ts_nx[nn] #(Q, K)
-    knot_nx_nn = knot_nx[nn]
-
-    if self.interp_fn  == 'idw':
-      #IDW
-      eps = 1e-10
-      weights = 1/(dist + eps) #* mass[ts_nn_idx] #(Q, K)
-      weights /= np.sum(weights,axis=1,keepdims=True) #(Q, K)
-      cp_vector = np.sum(weights[:,:,None] * neighbor_nx, axis=1).astype(np.float32) #(Q)
-      knot_vector = np.sum(weights * knot_nx_nn, axis=1).astype(np.float32) #(Q)
-
-    elif self.interp_fn == 'rbf':
-      rbf = RBFInterpolator(ts, ts_nx, k, kernel='linear')
-      cp_vector = rbf(query).astype(np.float32).squeeze()
-      rbf_knot = RBFInterpolator(ts, knot_nx, k)
-      knot_vector = rbf_knot(query).astype(np.float32).squeeze()
-
-    elif self.interp_fn == 'lin':
-      raise NotImplementedError
-      # lin = LinearNDInterpolator(ts, ts_nx)
-      # interp = lin(query).astype(np.float32)
-      # nan_mask = np.isnan(interp.sum(1))
-      # interp = interp[~nan_mask]
-      # nn = nn[~nan_mask]
-      # neighbor_nx = neighbor_nx[~nan_mask]
-
-    q_interp = query + cp_vector
-    knot_interp = query_knot + knot_vector
-
-    if not  return_neighbor:
-        return q_interp, knot_interp
-    else: 
-        return (q_interp, knot_interp, 
-        np.concatenate([self.pl[t][nn], self.t[t][nn][:,:,None]],axis = -1), 
-        np.concatenate([self.pl[t+1][nn], self.t[t+1][nn][:,:,None]],axis = -1), )
 
 
 if __name__ == '__main__':
     #interp control points
-    for n_cp in [10,25,50,100]:
+    for n_cp in [100]:
       print(n_cp)
-      fname = 'data/spl_3d_cp_%d.npy' % n_cp
+      fname = 'data/spl_3d_%d.npy' % n_cp
       train, test, train_idx, test_idx = load_spline_file(fname,True, False)
       tra = np.load('data/tra_hcart.npy')
       tra_len = np.load('data/tra_len.npy')
@@ -378,4 +264,7 @@ if __name__ == '__main__':
         acc[:gt_len[i]] += 1
       all_mse /= acc
       ave_e = total_e / count
-      print(np.sqrt(ave_e))
+      print('average mse', np.sqrt(total_e / count))
+      np.save('error/interp_spline_%d.npy' % n_cp, all_mse)
+      plt.plot(np.arange(len(all_mse)),all_mse)
+      plt.savefig('fig/interp_spline_%d.jpg' % n_cp)

@@ -89,7 +89,7 @@ class AKBSpline:
         u_f[-1] = u[-1]
         # u_f[-1] = u[-1] + u[1] - u[0]
         f[1:-1] = np.linalg.norm(p_th_deri,axis=1) ** (1/(self.p))
-        # fix f value at 0 and -1 (this gives more error)
+        # fix f value at 0 and -1 (this gives higher error)
         # f[0] = f[1]
         # f[-1] = f[-2]
         return f, u_f
