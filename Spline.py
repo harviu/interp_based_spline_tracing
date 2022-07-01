@@ -24,7 +24,7 @@ def inverse_fn(F:np.array, u_f:np.array, F_array:np.array):
     return u_array
 
 class AKBSpline:
-    def __init__(self, curve_sequence:np.array, num_knots:np.array = 10, degree:int = 3, para_type='chord') -> None:
+    def __init__(self, curve_sequence:np.array, num_knots:np.array = 10, degree:int = 3, para_type='chord', max_step=2000) -> None:
         assert curve_sequence.shape[0] >= degree + 2
         assert num_knots >= (degree + 1) * 2
         # self.curve_sequence = self._normalize(curve_sequence,True)
@@ -35,7 +35,7 @@ class AKBSpline:
         else:
             # determin u based on time
             self.u = np.arange(0,len(curve_sequence)).astype(np.float32)
-            self.u /= 2000 # hard coded the largest time step
+            self.u /= max_step # hard coded the largest time step
         self.para_type = para_type
         # plt.plot(np.arange(len(self.u)),self.u)
         # plt.show()

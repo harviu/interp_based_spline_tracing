@@ -1,3 +1,4 @@
+from cProfile import label
 import numpy as np
 import math
 import h5py
@@ -30,8 +31,9 @@ def time_mse(a1, a2):
   a2 = a2.reshape(T,-1)
   return ((a1-a2) * (a1-a2)).mean(1)
 
-def load_spline_file(fname, return_idx = False, use_val=True):
+def load_spline_file(fname, return_idx = False, use_val=True, seed = 0):
     spline = np.load(fname, allow_pickle=True).item()
+    np.random.seed(seed)
     rand_num = np.random.rand(spline['c'].shape[0])
     degree = spline['k']
     u = np.array(spline['u'],dtype=object)
@@ -81,7 +83,7 @@ def load_spline_file(fname, return_idx = False, use_val=True):
             return train, test
 
 
-def draw_tra(trace, l, draw_points = False, ax = None):
+def draw_tra(trace, l, draw_points = False, ax = None, label = None):
     '''
     trace for one time step
     '''
@@ -92,7 +94,7 @@ def draw_tra(trace, l, draw_points = False, ax = None):
     rgb = get_rgb_cycle(l)
     if draw_points:
         ax.scatter(trace[:l,0], trace[:l,1], trace[:l,2], 'o',c=rgb)
-    ax.plot(trace[:l,0], trace[:l,1], trace[:l,2])
+    ax.plot(trace[:l,0], trace[:l,1], trace[:l,2],label=label)
 
 
 def get_rgb_cycle(length):

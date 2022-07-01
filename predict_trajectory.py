@@ -5,7 +5,6 @@ from scipy.spatial import KDTree
 from scipy.interpolate import LinearNDInterpolator, RBFInterpolator
 from matplotlib import pyplot as plt
 import time
-import pickle
 
 def knn(x:torch.Tensor, q:torch.Tensor, k:int=26, cuda = True):
   '''
@@ -149,13 +148,6 @@ class PathlineInterpolator():
 
     elif self.interp_fn == 'lin':
       raise NotImplementedError
-      lin = LinearNDInterpolator(ts, ts_nx)
-      interp = lin(query).astype(np.float32)
-      nan_mask = np.isnan(interp.sum(1))
-      live_mask = live_mask & ~nan_mask
-      interp = interp[~nan_mask]
-      nn = nn[~nan_mask]
-      neighbor_nx = neighbor_nx[~nan_mask]
     
     if not  return_neighbor:
         return interp, live_mask
@@ -175,6 +167,7 @@ if __name__ == '__main__':
   tra_len = np.load('data/tra_len.npy')
   print(tra.shape,tra_len.shape)
 
+  np.random.seed(0)
   rand_num = np.random.rand(len(tra_len))
   train = tra[:,rand_num<0.75]
   train_len = tra_len[rand_num<0.75]
@@ -192,7 +185,6 @@ if __name__ == '__main__':
   interp, interp_len = interper.interp_nsteps(query,start_time,k, end_time, True)
   interp_back, interp_len_back = interper.interp_nsteps(query, start_time, k, 0, False)
   print(time.time()- t1)
-
 
   # error masked
   mse_all = 0
@@ -217,5 +209,5 @@ if __name__ == '__main__':
   plt.plot(np.arange(len(mse_list)),mse_list)
   plt.savefig('fig/interp_tra_%s_%d.jpg' % (interp_method, start_time))
   
-  # np.save('data/interp_tra_rbf', interp)
-  # np.save('data/interp_tra_len_rbf', interp_len)
+  np.save('data/interp_tra_rbf', interp)
+  np.save('data/interp_tra_len_rbf', interp_len)

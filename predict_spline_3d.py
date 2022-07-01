@@ -76,7 +76,6 @@ class ControlPointInterpolator():
     nn_k=26
     
     # time step
-    # ts = round((starting_point[0,3] + 6.9068203) / (6.9068203 * 2)* 2000)
     print("time_step:",ts)
     u = float(ts) /2000
     pad_t = self.t.T
@@ -123,7 +122,6 @@ class ControlPointInterpolator():
       knot = masked_t[masked_idx, N_idx]
       cp = masked_cp[masked_idx, N_idx]
       knot_cp = np.concatenate((knot[:,None], cp), axis=-1)
-      # need to think more carefully about the end 
       if len(knot_cp) < nn_k:
         break
       nn, dist = kd_knn(knot_cp, query_knot_cp, min(nn_k,len(knot_cp)))
@@ -135,7 +133,6 @@ class ControlPointInterpolator():
       nx_interp = self.interp_one_raw(dist, rel_nx, query_knot_cp)
       nx_result = np.zeros((1,starting_point.shape[0], starting_point.shape[1]+1))
       nx_result[:,active_idx,:] = nx_interp
-      # mask = nx_interp[:,3] <= 6.9068203
       mask = nx_interp[:,0] <= 1
       result = np.concatenate((result,nx_result),axis=0)
 
@@ -299,12 +296,6 @@ class ControlPointInterpolator():
 
     elif self.interp_fn == 'lin':
       raise NotImplementedError
-      # lin = LinearNDInterpolator(ts, ts_nx)
-      # interp = lin(query).astype(np.float32)
-      # nan_mask = np.isnan(interp.sum(1))
-      # interp = interp[~nan_mask]
-      # nn = nn[~nan_mask]
-      # neighbor_nx = neighbor_nx[~nan_mask]
 
     q_interp = query + cp_vector
     knot_interp = query_knot + knot_vector
@@ -319,63 +310,58 @@ class ControlPointInterpolator():
 
 if __name__ == '__main__':
     #interp control points
-    for n_cp in [10,25,50,100]:
-      print(n_cp)
-      fname = 'data/spl_3d_cp_%d.npy' % n_cp
-      train, test, train_idx, test_idx = load_spline_file(fname,True, False)
-      tra = np.load('data/tra_hcart.npy')
-      tra_len = np.load('data/tra_len.npy')
-      # np.save('train_idx.npy',train_idx)
-      # np.save('test_idx.npy',test_idx)
-      # with open('data/train.pkl','wb') as f:
-      #   pickle.dump(train, f)
-      # I remove the truncate method in the utils
-      test['t'] = test['t'][2:-2]
-      train['t'] = train['t'][2:-2]
-      # val['t'] = val['t'][2:-2]
+    for start_time in [0,250,500,750]:
+      for n_cp in [10, 25, 50, 100]:
+        print("number of control points:", n_cp)
+        fname = 'data/spl_3d_%d.npy' % n_cp
+        train, test, train_idx, test_idx = load_spline_file(fname,True, False)
+        tra = np.load('data/tra_hcart.npy')
+        tra_len = np.load('data/tra_len.npy')
+        test['t'] = test['t'][2:-2]
+        train['t'] = train['t'][2:-2]
 
-      interper = ControlPointInterpolator(train,'idw')
-      start_time = 0
+        interper = ControlPointInterpolator(train,'idw')
 
-      t1 = time.time()
-      result = interper.interp_any_start(tra[test_idx, start_time], start_time, 26)
-      print(time.time()- t1)
-      gt = tra[test_idx]
-      gt_len = tra_len[test_idx]
+        t1 = time.time()
+        result = interper.interp_any_start(tra[test_idx, start_time], start_time, 26)
+        print(time.time()- t1)
+        gt = tra[test_idx]
+        gt_len = tra_len[test_idx]
 
-      all_mse = np.zeros((2001))
-      total_e = 0
-      count = 0
-      acc = np.zeros((2001))
-      
-      recon_path_3d = []
-      gt_path_3d = []
-      result = result.transpose(1,0,2)
-      for i,spline in enumerate(result):
-        mask = spline.sum(1) != 0 
-        spline = spline[mask]
-        t = spline[:,0]
-        t = (t-t.min())/(t.max()-t.min())
-        t[1] = 0
-        t[-2] = 1
-        t = np.pad(t, ((2,2)), constant_values= ((0,1)))
-        c = spline[:,1:].T
-        k = test['k']
-        u = test['u'][i]
-        path = np.array(splev(u, (t,c,k), ext=1)).T
-        gtline = gt[i,:gt_len[i]]
-        time_diff = gtline - path
-        time_mse = np.sqrt((time_diff ** 2).mean(1))
-        total_e += (time_diff ** 2).mean(1).sum()
-        count += len(time_diff)
+        all_mse = np.zeros((2001))
+        total_e = 0
+        count = 0
+        acc = np.zeros((2001))
+        
+        recon_path_3d = []
+        gt_path_3d = []
+        result = result.transpose(1,0,2)
+        for i,spline in enumerate(result):
+          mask = spline.sum(1) != 0 
+          spline = spline[mask]
+          t = spline[:,0]
+          t = np.pad(t, ((2,2)), constant_values= ((0,t[-1])))
+          c = spline[:,1:].T
+          k = test['k']
+          u = test['u'][i]
+          path = np.array(splev(u, (t,c,k), ext=1)).T
+          gtline = gt[i,:gt_len[i]]
+          time_diff = gtline - path
+          time_mse = np.sqrt((time_diff ** 2).mean(1))
+          total_e += (time_diff ** 2).mean(1).sum()
+          count += len(time_diff)
 
-        recon_path = np.concatenate((path, time_mse[:,None]),axis=-1)
-        gt_path = np.concatenate((gtline, time_mse[:,None]),axis=-1)
-        recon_path_3d.append(recon_path)
-        gt_path_3d.append(gt_path)
+          recon_path = np.concatenate((path, time_mse[:,None]),axis=-1)
+          gt_path = np.concatenate((gtline, time_mse[:,None]),axis=-1)
+          recon_path_3d.append(recon_path)
+          gt_path_3d.append(gt_path)
 
-        all_mse[:gt_len[i]] += time_mse
-        acc[:gt_len[i]] += 1
-      all_mse /= acc
-      ave_e = total_e / count
-      print(np.sqrt(ave_e))
+          all_mse[:gt_len[i]] += time_mse
+          acc[:gt_len[i]] += 1
+        all_mse /= acc
+        ave_e = total_e / count
+        np.save('error/interp_spline_start_%d_cp_%d' % (start_time, n_cp), all_mse)
+        plt.plot(np.arange(len(all_mse)),all_mse)
+        plt.savefig('fig/interp_spline_start_%d_cp_%d' % (start_time, n_cp))
+        print('average error:',np.sqrt(ave_e))
+        
